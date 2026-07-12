@@ -203,7 +203,89 @@ class TestZ3ParameterConstraints < Minitest::Test
 
     assert @solver.satisfiable?
   end
+# anyOf schema tests
+  def test_constrain_int_with_anyof_const
+    schema = {
+      "anyOf" => [
+        { "const" => 1 },
+        { "const" => 2 }
+      ]
+    }
+    param = Udb::Z3ParameterTerm.new("anyof_const_param", @solver, schema)
 
+    assert @solver.satisfiable?
+
+    # Only 1 or 2 should be allowed
+    @solver.push
+    @solver.assert(param == 1)
+    assert @solver.satisfiable?
+    @solver.pop
+
+    @solver.push
+    @solver.assert(param == 2)
+    assert @solver.satisfiable?
+    @solver.pop
+
+    @solver.push
+    @solver.assert(param == 3)
+    refute @solver.satisfiable?
+    @solver.pop
+  end
+
+  def test_constrain_int_with_anyof_ranges
+    schema = {
+      "anyOf" => [
+        { "minimum" => 0, "maximum" => 10 },
+        { "minimum" => 100, "maximum" => 110 }
+      ]
+    }
+    param = Udb::Z3ParameterTerm.new("anyof_range_param", @solver, schema)
+
+    assert @solver.satisfiable?
+
+    # A value inside the first range should be allowed
+    @solver.push
+    @solver.assert(param == 5)
+    assert @solver.satisfiable?
+    @solver.pop
+
+    # A value inside the second range should be allowed
+    @solver.push
+    @solver.assert(param == 105)
+    assert @solver.satisfiable?
+    @solver.pop
+
+    # A value in the gap between the two ranges should not be allowed
+    @solver.push
+    @solver.assert(param == 50)
+    refute @solver.satisfiable?
+    @solver.pop
+  end
+
+  def test_constrain_int_with_anyof_and_other_constraints
+    # anyOf combined with a sibling minimum: the value must satisfy the
+    # minimum *and* fall into one of the anyOf subschemas.
+    schema = {
+      "minimum" => 1,
+      "anyOf" => [
+        { "const" => 0 },
+        { "const" => 5 }
+      ]
+    }
+    param = Udb::Z3ParameterTerm.new("anyof_combined_param", @solver, schema)
+
+    # const => 0 satisfies anyOf but violates the sibling minimum => 1,
+    # so only 5 should remain satisfiable.
+    @solver.push
+    @solver.assert(param == 0)
+    refute @solver.satisfiable?
+    @solver.pop
+
+    @solver.push
+    @solver.assert(param == 5)
+    assert @solver.satisfiable?
+    @solver.pop
+  end
   # Type detection tests
   def test_detect_type_from_allof_integer
     schema = {

@@ -390,7 +390,20 @@ module Udb
       end
 
       if schema_hsh.key?("anyOf")
-        raise "TODO: anyOf not yet implemented for integer constraints"
+        # term just needs to match ANY one of these subschemas, so we OR them.
+        # but each subschema can have more than one rule (min+max together),
+        # so those get ANDed first before going into the OR.
+        subschema_exprs = schema_hsh.fetch("anyOf").map do |subschema|
+          sub_assertions = constrain_int(solver, term, subschema, assert: false)
+          if sub_assertions.empty?
+            Z3.True
+          elsif sub_assertions.size == 1
+            sub_assertions.fetch(0)
+          else
+            Z3.And(*sub_assertions)
+          end
+        end
+        assertions << Z3.Or(*subschema_exprs)
       end
 
       if schema_hsh.key?("oneOf")
